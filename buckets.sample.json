@@ -1,0 +1,21 @@
+[
+  {
+    "id": "localhost",
+    "active": true,
+    "private": false,
+    "domains": [
+      "localhost",
+      "127.0.0.1"
+    ],
+    "vod": [
+      "360p",
+      "720p"
+    ],
+    "aod": [
+      "128k"
+    ],
+    "upload_secret": "upload_secret",
+    "management_secret": "management_secret",
+    "serve_secret": "serve_secret"
+  }
+]

@@ -1,0 +1,95 @@
+# Copyright(c) 2021 aasaam software development group
+version: "3"
+
+services:
+  adms-app:
+    container_name: adms-app
+    restart: unless-stopped
+    build: .
+    depends_on:
+      - adms-redis
+    volumes:
+      - ./buckets.json:/buckets.json:ro
+      - ./app:/app
+    environment:
+      # public
+      ASM_PUBLIC_APP_INSTANCE: ${ASM_PUBLIC_APP_INSTANCE:-2}
+      ASM_PUBLIC_SERVER_ID: ${ASM_PUBLIC_SERVER_ID:-0}
+      ASM_PUBLIC_SERVER_MAINTAIN: ${ASM_SERVER_MAINTAIN:-false}
+      ASM_PUBLIC_POST_UPLOADED_SIZE_BYTES: ${ASM_PUBLIC_POST_UPLOADED_SIZE_BYTES:-4194304}
+      ASM_PUBLIC_TUSD_PATH: ${ASM_PUBLIC_TUSD_PATH:-/resumable-upload}
+      ASM_PUBLIC_SWAGGER_PATH: ${ASM_PUBLIC_SWAGGER_PATH:-/docs}
+
+      # private
+      ASM_MAIN_APP_PORT: ${ASM_MAIN_APP_PORT:-3000}
+      ASM_AUTH_APP_PORT: ${ASM_AUTH_APP_PORT:-3001}
+      ASM_DOWNLOADER_DNS_SERVERS: ${ASM_DNS_SERVERS:-4.2.2.4,8.8.8.8,1.1.1.1}
+      ASM_DOWNLOADER_LIMIT_RATE_KB: ${ASM_DOWNLOADER_LIMIT_RATE_KB:-256}
+    command: tail -f /dev/null
+    volumes:
+      - ./buckets.json:/buckets.json:ro
+      - ./app:/app
+      - ./storage:/storage
+
+  adms-redis:
+    container_name: adms-redis
+    restart: unless-stopped
+    image: redis:6
+
+  adms-tusd:
+    restart: unless-stopped
+    container_name: adms-tusd
+    image: tusproject/tusd
+    depends_on:
+      - adms-app
+    environment:
+      # public
+      ASM_PUBLIC_POST_UPLOADED_SIZE_BYTES: ${ASM_PUBLIC_POST_UPLOADED_SIZE_BYTES:-4194304}
+      ASM_PUBLIC_TUSD_PATH: ${ASM_PUBLIC_TUSD_PATH:-/resumable-upload}
+
+      # private
+      ASM_TUSD_PORT: ${ASM_TUSD_PORT:-1080}
+      ASM_MAIN_APP_PORT: ${ASM_MAIN_APP_PORT:-3000}
+
+    command: -behind-proxy -expose-metrics=false -max-size=${ASM_PUBLIC_POST_UPLOADED_SIZE_BYTES:-4194304} -base-path=${ASM_PUBLIC_TUSD_PATH:-/resumable-upload} -upload-dir=/storage/tus -port=${ASM_TUSD_PORT:-1080} -hooks-http=http://adms-app:${ASM_AUTH_APP_PORT:-3001}/tusd-hooks-http
+    user: root
+    volumes:
+      - ./storage/tus:/storage/tus
+
+  adms-nginx:
+    container_name: adms-nginx
+    restart: unless-stopped
+    image: nginx:1
+    ports:
+      - ${ASM_UPLOAD_PORT:-8080}:${ASM_UPLOAD_PORT:-8080}
+      - ${ASM_SERVE_PORT:-8880}:${ASM_SERVE_PORT:-8880}
+    depends_on:
+      - adms-app
+      - adms-tusd
+    environment:
+      # public
+      ASM_PUBLIC_POST_UPLOADED_SIZE_BYTES: ${ASM_PUBLIC_POST_UPLOADED_SIZE_BYTES:-4194304}
+      ASM_PUBLIC_TUSD_PATH: ${ASM_PUBLIC_TUSD_PATH:-/resumable-upload}
+      ASM_PUBLIC_SWAGGER_PATH: ${ASM_PUBLIC_SWAGGER_PATH:-/docs}
+
+      # private
+      ASM_NGINX_WORKER_PROCESSES: ${ASM_NGINX_WORKER_PROCESSES:-2}
+      ASM_NGINX_WORKER_RLIMIT_NOFILE: ${ASM_NGINX_WORKER_RLIMIT_NOFILE:-2048}
+      ASM_NGINX_WORKER_CONNECTIONS: ${ASM_NGINX_WORKER_CONNECTIONS:-1024}
+      ASM_NGINX_ERROR_LOG_LEVEL: ${ASM_NGINX_ERROR_LOG_LEVEL:-warn}
+      ASM_NGINX_TMPFS_CACHE_SIZE_MB: ${ASM_NGINX_ERROR_LOG_LEVEL:-2048}
+      ASM_NGINX_TMPFS_UPLOAD_AUTH_CACHE_SIZE_MB: ${ASM_NGINX_TMPFS_UPLOAD_AUTH_CACHE_SIZE_MB:-128}
+      ASM_NGINX_TMPFS_SERVE_CACHE_SIZE_MB: ${ASM_NGINX_TMPFS_SERVE_CACHE_SIZE_MB:-1536}
+      ASM_UPLOAD_PORT: ${ASM_UPLOAD_PORT:-8080}
+      ASM_SERVE_PORT: ${ASM_SERVE_PORT:-8880}
+      ASM_TUSD_PORT: ${ASM_TUSD_PORT:-1080}
+      ASM_MAIN_APP_PORT: ${ASM_MAIN_APP_PORT:-3000}
+      ASM_AUTH_APP_PORT: ${ASM_AUTH_APP_PORT:-3001}
+    tmpfs:
+      - /nginx-tmpfs:rw,nodev,nosuid,noexec,noatime,size=${ASM_NGINX_TMPFS_CACHE_SIZE_MB:-2048}m
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/favicon.ico:/etc/nginx/favicon.ico:ro
+      - ./nginx/mime.types:/etc/nginx/mime.types:ro
+      - ./nginx/templates/default.dev.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - ./storage:/storage:ro
