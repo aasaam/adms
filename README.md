@@ -1,5 +1,9 @@
 # adms (aasaam distributed media server)
 
+## Development mode
+
+This project is under development, and not production ready.
+
 ## Why
 
 Scaling and maintain file storage is one the most use case. Using AWS/GCS and etc not accessible by all users and some post process of files like converting will be difficult.
